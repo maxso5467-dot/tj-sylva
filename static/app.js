@@ -1898,11 +1898,25 @@ $("#new-session").addEventListener("click", () => {
   render();
 });
 
-xuenwuEntry?.addEventListener("click", () => {
+function openXuenwuAssistant() {
   setActiveView("xuenwu");
+  closeModePopover();
+  userMenu?.classList.add("hidden");
+  closeAllPeekPopovers();
+  closeSubdividePopover();
+  closeNodeComposer();
   render();
   requestAnimationFrame(() => xuenwuInput?.focus());
-});
+}
+
+xuenwuEntry?.addEventListener("click", openXuenwuAssistant);
+
+document.addEventListener("click", (event) => {
+  if (!event.target.closest?.("#xuenwu-assistant-entry")) return;
+  event.preventDefault();
+  event.stopPropagation();
+  openXuenwuAssistant();
+}, true);
 
 xuenwuForm?.addEventListener("submit", (event) => {
   event.preventDefault();
