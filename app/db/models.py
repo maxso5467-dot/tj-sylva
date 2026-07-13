@@ -226,3 +226,126 @@ class AppSetting(Base):
     updated_by: Mapped[str | None] = mapped_column(
         String(64), ForeignKey("app_users.id", ondelete="SET NULL"), nullable=True
     )
+
+
+class ReviewItem(Base):
+    """Xuenwu 复习内容:概念回顾、复习题、错题再练等。"""
+
+    __tablename__ = "review_items"
+    __table_args__ = (
+        Index("ix_review_items_user_session", "user_id", "session_id"),
+        Index("ix_review_items_node", "node_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("rev"))
+    user_id: Mapped[str] = mapped_column(String(64), ForeignKey("app_users.id", ondelete="CASCADE"), nullable=False)
+    session_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("learning_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    node_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("knowledge_nodes.id", ondelete="SET NULL"), nullable=True
+    )
+    item_type: Mapped[str] = mapped_column(String(30), nullable=False, default="question")
+    difficulty: Mapped[str] = mapped_column(String(20), nullable=False, default="basic")
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    answer: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    explanation: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="ai")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ReviewAttempt(Base):
+    """学生对某条复习内容的一次作答记录。"""
+
+    __tablename__ = "review_attempts"
+    __table_args__ = (
+        Index("ix_review_attempts_item", "review_item_id"),
+        Index("ix_review_attempts_user", "user_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("att"))
+    review_item_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("review_items.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(String(64), ForeignKey("app_users.id", ondelete="CASCADE"), nullable=False)
+    student_answer: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+
+
+class WrongQuestion(Base):
+    """自动错题本。第一版不做错误类型分类,由学生写反思。"""
+
+    __tablename__ = "wrong_questions"
+    __table_args__ = (
+        Index("ix_wrong_questions_user_session", "user_id", "session_id"),
+        Index("ix_wrong_questions_node", "node_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("wrong"))
+    user_id: Mapped[str] = mapped_column(String(64), ForeignKey("app_users.id", ondelete="CASCADE"), nullable=False)
+    session_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("learning_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    node_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("knowledge_nodes.id", ondelete="SET NULL"), nullable=True
+    )
+    review_item_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("review_items.id", ondelete="SET NULL"), nullable=True
+    )
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    student_answer: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    correct_answer: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    review_status: Mapped[str] = mapped_column(String(20), nullable=False, default="unresolved")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=now_utc, onupdate=now_utc, nullable=False
+    )
+
+
+class LearningReflection(Base):
+    """学生对复习、错题或知识节点的反思。"""
+
+    __tablename__ = "learning_reflections"
+    __table_args__ = (
+        Index("ix_learning_reflections_user_session", "user_id", "session_id"),
+        Index("ix_learning_reflections_wrong", "wrong_question_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("refl"))
+    user_id: Mapped[str] = mapped_column(String(64), ForeignKey("app_users.id", ondelete="CASCADE"), nullable=False)
+    session_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("learning_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    node_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("knowledge_nodes.id", ondelete="SET NULL"), nullable=True
+    )
+    wrong_question_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("wrong_questions.id", ondelete="SET NULL"), nullable=True
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+
+
+class AssistantSuggestion(Base):
+    """AI 学习助手建议历史。"""
+
+    __tablename__ = "assistant_suggestions"
+    __table_args__ = (
+        Index("ix_assistant_suggestions_user_session", "user_id", "session_id"),
+        Index("ix_assistant_suggestions_created", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("sug"))
+    user_id: Mapped[str] = mapped_column(String(64), ForeignKey("app_users.id", ondelete="CASCADE"), nullable=False)
+    session_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("learning_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    node_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("knowledge_nodes.id", ondelete="SET NULL"), nullable=True
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    suggestion_type: Mapped[str] = mapped_column(String(30), nullable=False, default="review")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)

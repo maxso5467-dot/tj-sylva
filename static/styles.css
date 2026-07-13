@@ -289,6 +289,21 @@ body.light-theme .app-shell {
   font-size: 20px;
 }
 
+.rail-dot {
+  width: 9px;
+  height: 9px;
+  margin-left: auto;
+  border-radius: 999px;
+  background: #ff4d57;
+  box-shadow: 0 0 0 4px rgba(255, 77, 87, 0.12);
+}
+
+.xuenwu-entry.active {
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--ink);
+}
+
 .rail-label {
   min-width: 0;
   overflow: hidden;
@@ -749,6 +764,200 @@ body.light-theme .ghost-button:hover {
   overflow-x: hidden;
   scrollbar-width: thin;
   animation: starter-enter 420ms var(--ease-decel) both;
+}
+
+.xuenwu-assistant {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: clamp(16px, 2.2vh, 28px);
+  overflow: hidden;
+}
+
+.xuenwu-shell {
+  display: grid;
+  grid-template-rows: auto auto auto 1fr auto;
+  gap: 18px;
+  height: 100%;
+  min-height: 0;
+}
+
+.xuenwu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.xuenwu-kicker {
+  margin: 0 0 8px;
+  color: rgba(147, 197, 253, 0.86);
+  font-size: 13px;
+  font-weight: 860;
+  letter-spacing: 0.08em;
+}
+
+.xuenwu-head h1 {
+  margin: 0 0 8px;
+  color: var(--ink);
+  font-size: clamp(24px, 3vw, 34px);
+  line-height: 1.1;
+}
+
+#xuenwu-current-map {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 760;
+}
+
+.xuenwu-notice {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(18, 19, 27, 0.66);
+  color: var(--muted);
+  padding: 0 16px;
+  box-shadow: var(--shadow);
+}
+
+.xuenwu-hero {
+  display: grid;
+  align-content: center;
+  gap: 14px;
+  min-height: 0;
+  width: min(620px, 100%);
+  margin: 0 auto;
+}
+
+.xuenwu-hero h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 25px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.xuenwu-hero > p {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 720;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.xuenwu-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.xuenwu-results {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  max-height: 34vh;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.035);
+  padding: 12px;
+}
+
+.xuenwu-result-item {
+  display: grid;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+  padding: 0 0 10px;
+}
+
+.xuenwu-result-item:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.xuenwu-result-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 820;
+}
+
+.xuenwu-result-item strong {
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.xuenwu-result-item p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.xuenwu-action {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  min-height: 70px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--ink);
+  padding: 14px 18px;
+  text-align: left;
+  transition:
+    border-color var(--dur-quick) var(--ease-standard),
+    background var(--dur-quick) var(--ease-standard),
+    transform var(--dur-quick) var(--ease-standard);
+}
+
+.xuenwu-action:hover {
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.075);
+  transform: translateY(-1px);
+}
+
+.xuenwu-action span {
+  font-size: 15px;
+  font-weight: 860;
+}
+
+.xuenwu-action em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 720;
+  line-height: 1.45;
+}
+
+.xuenwu-composer {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(18, 19, 27, 0.72);
+  padding: 10px;
+  box-shadow: var(--shadow);
+}
+
+.xuenwu-composer textarea {
+  min-height: 44px;
+  max-height: 110px;
+  border: 0;
+  background: transparent;
+  padding: 10px;
+  resize: none;
+}
+
+body.light-theme .xuenwu-notice,
+body.light-theme .xuenwu-action,
+body.light-theme .xuenwu-composer {
+  border-color: rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.74);
 }
 
 /* 进入问卷模式:让出整个左侧区域给问卷,问卷内部可滚动 */

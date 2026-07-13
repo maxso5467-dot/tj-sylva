@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import get_settings
 from app.db.base import get_session_factory, init_engine, shutdown_engine
-from app.routers import auth, health, messages, nodes, prompts, sessions, web_search
+from app.routers import auth, health, messages, nodes, prompts, sessions, web_search, xuenwu
 from app.routers import settings as settings_router
 from app.services.auth import ensure_admin_seeded
 from app.services.prompt_store import init_prompt_store
@@ -82,6 +82,7 @@ def create_app() -> FastAPI:
     app.include_router(nodes.router)
     app.include_router(nodes.session_node_router)
     app.include_router(web_search.router)
+    app.include_router(xuenwu.router)
 
     static_dir = settings.static_dir
     if static_dir.exists():

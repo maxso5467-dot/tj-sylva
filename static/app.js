@@ -22,6 +22,7 @@ const state = {
   sessionSearch: "",
   theme: localStorage.getItem("km.theme") || "dark",
   mode: localStorage.getItem("km.mode") || "Lite",
+  activeView: localStorage.getItem("km.activeView") || "map",
   // 学习模式现在只有教练模式,前端固定 true,旧的 localStorage 值忽略
   coachMode: true,
   // 速览卡片栈:支持嵌套(在 peek answer 里再划词,生成子 peek 叠在上面)。
@@ -84,6 +85,12 @@ const modeHelp = $("#mode-help");
 const selectionMenu = $("#selection-menu");
 const backgroundQuiz = $("#background-quiz");
 const topicPreviewEl = $("#topic-preview");
+const xuenwuEntry = $("#xuenwu-assistant-entry");
+const xuenwuAssistant = $("#xuenwu-assistant");
+const xuenwuCurrentMap = $("#xuenwu-current-map");
+const xuenwuForm = $("#xuenwu-form");
+const xuenwuInput = $("#xuenwu-input");
+const xuenwuResults = $("#xuenwu-results");
 
 document.body.classList.toggle("light-theme", state.theme === "light");
 appShell.classList.toggle("sidebar-collapsed", state.sidebarCollapsed);
@@ -102,6 +109,7 @@ function hydrateStaticTooltips() {
   const entries = [
     ["#sidebar-toggle", "收起或打开左侧边栏"],
     ["#new-session", "新建一张学习地图"],
+    ["#xuenwu-assistant-entry", "打开 AI 学习助手"],
     ["#theme-toggle", "切换深色 / 浅色主题"],
     ["#avatar-button", "打开用户菜单"],
     ["#mode-button", "切换思维深度"],
@@ -1866,6 +1874,7 @@ function computeEnterDelays(nodes) {
 }
 
 $("#new-session").addEventListener("click", () => {
+  setActiveView("map");
   localStorage.removeItem("km.sessionId");
   localStorage.removeItem("km.currentNodeId");
   state.sessionId = null;
@@ -1887,6 +1896,39 @@ $("#new-session").addEventListener("click", () => {
   clearPendingQuote();
   if (chatInput) chatInput.value = "";
   render();
+});
+
+xuenwuEntry?.addEventListener("click", () => {
+  setActiveView("xuenwu");
+  render();
+  requestAnimationFrame(() => xuenwuInput?.focus());
+});
+
+xuenwuForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const value = xuenwuInput?.value.trim();
+  if (!value) return;
+  xuenwuInput.value = "";
+  resizeXuenwuInput();
+  handleXuenwuPrompt(value);
+});
+
+xuenwuInput?.addEventListener("input", resizeXuenwuInput);
+xuenwuInput?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    xuenwuForm?.requestSubmit();
+  }
+});
+
+document.querySelectorAll("[data-xuenwu-prompt]").forEach((button) => {
+  button.addEventListener("click", () => {
+    if (!xuenwuInput) return;
+    xuenwuInput.value = button.dataset.xuenwuPrompt || "";
+    resizeXuenwuInput();
+    xuenwuInput.focus();
+    xuenwuForm?.requestSubmit();
+  });
 });
 
 $("#chat-form").addEventListener("submit", async (event) => {
@@ -2210,6 +2252,7 @@ function renderSessionList() {
       <em>${Number(session.message_count || 0)} 条对话 · ${Number(session.node_count || 0)} 个节点</em>
     `;
     button.addEventListener("click", async () => {
+      setActiveView("map");
       await loadSession(session.id);
       closeSessionDrawer();
     });
@@ -2607,11 +2650,120 @@ function setZoom(next) {
 
 function render() {
   const hasSession = Boolean(state.sessionId) || state.generatingTree;
-  starter.classList.toggle("hidden", hasSession);
-  workspace.classList.toggle("hidden", !hasSession);
+  const assistantOpen = state.activeView === "xuenwu";
+  starter.classList.toggle("hidden", assistantOpen || hasSession);
+  workspace.classList.toggle("hidden", assistantOpen || !hasSession);
+  xuenwuAssistant?.classList.toggle("hidden", !assistantOpen);
+  xuenwuEntry?.classList.toggle("active", assistantOpen);
+  renderXuenwuAssistant();
   renderMessages();
   renderTree();
   if (state.chainPanel) renderChainPanel();
+}
+
+function setActiveView(view) {
+  state.activeView = view === "xuenwu" ? "xuenwu" : "map";
+  localStorage.setItem("km.activeView", state.activeView);
+}
+
+function renderXuenwuAssistant() {
+  if (!xuenwuCurrentMap) return;
+  const currentSession = state.sessions.find((session) => session.id === state.sessionId);
+  const root = state.nodes.find((node) => !node.parent_id) || state.nodes[0];
+  const title = currentSession?.title || currentSession?.field || root?.title || "未选择";
+  xuenwuCurrentMap.textContent = `当前地图：${title}`;
+}
+
+function resizeXuenwuInput() {
+  if (!xuenwuInput) return;
+  xuenwuInput.style.height = "auto";
+  xuenwuInput.style.height = Math.min(xuenwuInput.scrollHeight, 110) + "px";
+}
+
+async function handleXuenwuPrompt(prompt) {
+  if (!state.sessionId) {
+    renderXuenwuResults([{ content: "请先在左侧选择一张学习地图，再使用 AI 学习助手。", meta: "未选择地图" }]);
+    return;
+  }
+  try {
+    if (prompt.includes("错题") || prompt.includes("反思")) {
+      await loadXuenwuWrongQuestions();
+      return;
+    }
+    await generateXuenwuReviewItems();
+  } catch (error) {
+    renderXuenwuResults([{ content: `学习助手暂时不可用:${error.message}`, meta: "请求失败" }]);
+  }
+}
+
+async function generateXuenwuReviewItems() {
+  renderXuenwuResults([{ content: "正在根据当前学习地图生成 5 个轻量复习内容...", meta: "生成中" }]);
+  const response = await fetch(`/api/xuenwu/sessions/${state.sessionId}/review-items/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ count: 5 }),
+  });
+  if (!response.ok) throw new Error(await response.text());
+  const payload = await response.json();
+  renderXuenwuResults(
+    (payload.items || []).map((item) => ({
+      content: item.content,
+      meta: `${reviewTypeLabel(item.item_type)} · ${difficultyLabel(item.difficulty)}`,
+      detail: item.explanation || item.answer || "",
+    })),
+  );
+}
+
+async function loadXuenwuWrongQuestions() {
+  renderXuenwuResults([{ content: "正在读取当前学习地图的错题与反思...", meta: "读取中" }]);
+  const response = await fetch(`/api/xuenwu/sessions/${state.sessionId}/wrong-questions`);
+  if (!response.ok) throw new Error(await response.text());
+  const payload = await response.json();
+  const items = payload.items || [];
+  if (!items.length) {
+    renderXuenwuResults([{ content: "当前学习地图还没有错题记录。", meta: "错题本" }]);
+    return;
+  }
+  renderXuenwuResults(
+    items.map((item) => ({
+      content: item.question,
+      meta: `错题 · ${item.review_status === "resolved" ? "已掌握" : "待复习"}`,
+      detail: `你的答案:${item.student_answer || "未记录"} / 参考:${item.correct_answer || "暂无"}`,
+    })),
+  );
+}
+
+function renderXuenwuResults(items) {
+  if (!xuenwuResults) return;
+  xuenwuResults.innerHTML = "";
+  xuenwuResults.classList.remove("hidden");
+  for (const item of items) {
+    const row = document.createElement("article");
+    row.className = "xuenwu-result-item";
+    row.innerHTML = `
+      <div class="xuenwu-result-meta"><span>${escapeHtml(item.meta || "Xuenwu")}</span></div>
+      <strong>${escapeHtml(item.content || "")}</strong>
+      ${item.detail ? `<p>${escapeHtml(item.detail)}</p>` : ""}
+    `;
+    xuenwuResults.append(row);
+  }
+}
+
+function reviewTypeLabel(type) {
+  return {
+    concept: "概念回顾",
+    question: "复习题",
+    reflection: "反思提示",
+    wrong_retry: "错题再练",
+  }[type] || "复习内容";
+}
+
+function difficultyLabel(difficulty) {
+  return {
+    basic: "基础",
+    medium: "中等",
+    hard: "稍复杂",
+  }[difficulty] || difficulty || "普通";
 }
 
 function renderMessages({ preserveScroll = false } = {}) {

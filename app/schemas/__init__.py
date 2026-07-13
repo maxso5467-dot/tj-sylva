@@ -71,6 +71,20 @@ from app.schemas.settings import (
     UpdateSettingsIn,
 )
 from app.schemas.web_search import WebSearchIn, WebSearchOut
+from app.schemas.xuenwu import (
+    GenerateReviewIn,
+    ReflectionIn,
+    ReflectionOut,
+    ReviewAttemptOut,
+    ReviewItemOut,
+    ReviewItemsOut,
+    SubmitReviewAttemptIn,
+    SuggestionIn,
+    SuggestionOut,
+    SuggestionsOut,
+    WrongQuestionOut,
+    WrongQuestionsOut,
+)
 
 __all__ = [
     "BackgroundAnswered",
@@ -90,6 +104,7 @@ __all__ = [
     "CreatePeekIn",
     "DeepReanswerIn",
     "Highlight",
+    "GenerateReviewIn",
     "LoginIn",
     "LoginOut",
     "MessageIntent",
@@ -109,6 +124,11 @@ __all__ = [
     "PromptItem",
     "PromptsOut",
     "ResetPromptOut",
+    "ReflectionIn",
+    "ReflectionOut",
+    "ReviewAttemptOut",
+    "ReviewItemOut",
+    "ReviewItemsOut",
     "UpdatePromptsIn",
     "PreviewTopicsIn",
     "PreviewTopicsOut",
@@ -120,6 +140,10 @@ __all__ = [
     "SettingGroup",
     "SettingItem",
     "SettingsOut",
+    "SubmitReviewAttemptIn",
+    "SuggestionIn",
+    "SuggestionOut",
+    "SuggestionsOut",
     "TestConnectionIn",
     "TestConnectionOut",
     "TopicPreview",
@@ -135,4 +159,6 @@ __all__ = [
     "UserOut",
     "WebSearchIn",
     "WebSearchOut",
+    "WrongQuestionOut",
+    "WrongQuestionsOut",
 ]

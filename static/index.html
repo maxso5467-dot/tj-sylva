@@ -48,6 +48,11 @@
           <span class="rail-icon">＋</span>
           <span class="rail-label">新地图</span>
         </button>
+        <button id="xuenwu-assistant-entry" class="rail-button rail-action xuenwu-entry" type="button" title="打开 AI 学习助手">
+          <span class="rail-icon">✦</span>
+          <span class="rail-label">AI 学习助手</span>
+          <span class="rail-dot" aria-label="有复习提醒"></span>
+        </button>
         <label class="sidebar-search">
           <span>搜索标题</span>
           <input id="session-search" type="search" autocomplete="off" placeholder="输入关键词" />
@@ -91,6 +96,44 @@
           </form>
           <section id="background-quiz" class="background-quiz hidden" aria-live="polite"></section>
           <section id="topic-preview" class="topic-preview hidden" aria-live="polite"></section>
+        </section>
+
+        <section id="xuenwu-assistant" class="xuenwu-assistant hidden" aria-label="AI 学习助手">
+          <div class="xuenwu-shell">
+            <header class="xuenwu-head">
+              <div>
+                <p class="xuenwu-kicker">Xuenwu</p>
+                <h1>AI 学习助手</h1>
+                <span id="xuenwu-current-map">当前地图：未选择</span>
+              </div>
+            </header>
+            <div class="xuenwu-notice">
+              <span>今天有 5 个复习内容，预计 5 分钟</span>
+            </div>
+            <section class="xuenwu-hero" aria-label="学习助手推荐">
+              <h2>你好，admin</h2>
+              <p>我会根据当前学习地图、最近节点和错题记录，帮你安排轻量复习。</p>
+              <div class="xuenwu-actions">
+                <button class="xuenwu-action" type="button" data-xuenwu-prompt="开始今日轻量复习">
+                  <span>开始今日轻量复习</span>
+                  <em>概念回顾、基础题和稍复杂题混合</em>
+                </button>
+                <button class="xuenwu-action" type="button" data-xuenwu-prompt="回顾最近知识节点">
+                  <span>回顾最近知识节点</span>
+                  <em>从最近学过的节点中抓重点过一遍</em>
+                </button>
+                <button class="xuenwu-action" type="button" data-xuenwu-prompt="查看错题与反思">
+                  <span>查看错题与反思</span>
+                  <em>回顾错题、补充想法、生成类似题</em>
+                </button>
+              </div>
+            </section>
+            <section id="xuenwu-results" class="xuenwu-results hidden" aria-live="polite"></section>
+            <form id="xuenwu-form" class="xuenwu-composer">
+              <textarea id="xuenwu-input" rows="1" placeholder="问我今天该复习什么..."></textarea>
+              <button class="send-button" type="submit" title="发送">↑</button>
+            </form>
+          </div>
         </section>
 
         <section id="workspace" class="workspace hidden">
