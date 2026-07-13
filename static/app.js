@@ -2711,7 +2711,7 @@ async function handleXuenwuPrompt(prompt) {
 }
 
 async function generateXuenwuReviewItems() {
-  renderXuenwuResults([{ content: "正在根据当前学习地图生成 5 个轻量复习内容...", meta: "生成中" }]);
+  renderXuenwuResults([{ content: "正在根据当前学习地图和最近知识节点生成 5 道练习...", meta: "生成中" }]);
   const response = await fetch(`/api/xuenwu/sessions/${state.sessionId}/review-items/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -2719,13 +2719,7 @@ async function generateXuenwuReviewItems() {
   });
   if (!response.ok) throw new Error(await response.text());
   const payload = await response.json();
-  renderXuenwuResults(
-    (payload.items || []).map((item) => ({
-      content: item.content,
-      meta: `${reviewTypeLabel(item.item_type)} · ${difficultyLabel(item.difficulty)}`,
-      detail: item.explanation || item.answer || "",
-    })),
-  );
+  renderXuenwuReviewItems(payload.items || []);
 }
 
 async function loadXuenwuWrongQuestions() {
@@ -2760,6 +2754,78 @@ function renderXuenwuResults(items) {
       ${item.detail ? `<p>${escapeHtml(item.detail)}</p>` : ""}
     `;
     xuenwuResults.append(row);
+  }
+}
+
+function renderXuenwuReviewItems(items) {
+  if (!xuenwuResults) return;
+  xuenwuResults.innerHTML = "";
+  xuenwuResults.classList.remove("hidden");
+  if (!items.length) {
+    renderXuenwuResults([{ content: "当前学习地图还没有可生成题目的知识节点。", meta: "暂无题目" }]);
+    return;
+  }
+  items.forEach((item, index) => {
+    const row = document.createElement("article");
+    row.className = "xuenwu-result-item xuenwu-question-card";
+    row.dataset.reviewItemId = item.id;
+    row.innerHTML = `
+      <div class="xuenwu-result-meta">
+        <span>第 ${index + 1} 题</span>
+        <span>${escapeHtml(reviewTypeLabel(item.item_type))}</span>
+        <span>${escapeHtml(difficultyLabel(item.difficulty))}</span>
+      </div>
+      <strong>${escapeHtml(item.content || "")}</strong>
+      ${item.explanation ? `<p>${escapeHtml(item.explanation)}</p>` : ""}
+      <textarea class="xuenwu-answer" rows="3" placeholder="把你的答案或思路写在这里..."></textarea>
+      <details class="xuenwu-reference">
+        <summary>查看参考答案</summary>
+        <p>${escapeHtml(item.answer || "暂无参考答案")}</p>
+      </details>
+      <div class="xuenwu-question-actions">
+        <button type="button" class="ghost-button" data-xuenwu-submit="wrong">做错了，加入错题本</button>
+        <button type="button" class="primary-button" data-xuenwu-submit="correct">做对了</button>
+      </div>
+      <p class="xuenwu-submit-state" aria-live="polite"></p>
+    `;
+    row.querySelectorAll("[data-xuenwu-submit]").forEach((button) => {
+      button.addEventListener("click", () => submitXuenwuAttempt(row, item, button.dataset.xuenwuSubmit === "correct"));
+    });
+    xuenwuResults.append(row);
+  });
+}
+
+async function submitXuenwuAttempt(row, item, isCorrect) {
+  const textarea = row.querySelector(".xuenwu-answer");
+  const statusEl = row.querySelector(".xuenwu-submit-state");
+  const buttons = row.querySelectorAll("[data-xuenwu-submit]");
+  const studentAnswer = textarea?.value.trim() || "";
+  if (!studentAnswer) {
+    statusEl.textContent = "先写一点答案或思路，再提交。";
+    statusEl.className = "xuenwu-submit-state warn";
+    textarea?.focus();
+    return;
+  }
+  buttons.forEach((button) => { button.disabled = true; });
+  statusEl.textContent = "正在保存...";
+  statusEl.className = "xuenwu-submit-state";
+  try {
+    const response = await fetch(`/api/xuenwu/review-items/${item.id}/attempts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ student_answer: studentAnswer, is_correct: isCorrect }),
+    });
+    if (!response.ok) throw new Error(await response.text());
+    const payload = await response.json();
+    row.classList.add(isCorrect ? "is-correct" : "is-wrong");
+    statusEl.textContent = isCorrect
+      ? "已记录为做对。"
+      : `已加入错题本，后面可以在「查看错题与反思」里复习。${payload.wrong_question_id ? "" : ""}`;
+    statusEl.className = "xuenwu-submit-state ok";
+  } catch (error) {
+    buttons.forEach((button) => { button.disabled = false; });
+    statusEl.textContent = `保存失败:${error.message}`;
+    statusEl.className = "xuenwu-submit-state warn";
   }
 }
 

@@ -897,6 +897,70 @@ body.light-theme .ghost-button:hover {
   line-height: 1.5;
 }
 
+.xuenwu-question-card {
+  gap: 12px;
+}
+
+.xuenwu-answer {
+  width: 100%;
+  min-height: 88px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--ink);
+  padding: 12px;
+  resize: vertical;
+}
+
+.xuenwu-reference {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.035);
+  padding: 10px 12px;
+}
+
+.xuenwu-reference summary {
+  cursor: pointer;
+  color: var(--soft);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.xuenwu-reference p {
+  margin-top: 8px;
+}
+
+.xuenwu-question-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.xuenwu-submit-state {
+  min-height: 18px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.xuenwu-submit-state.ok {
+  color: #8fe6b0;
+}
+
+.xuenwu-submit-state.warn {
+  color: var(--danger);
+}
+
+.xuenwu-question-card.is-correct {
+  border-color: rgba(143, 230, 176, 0.34);
+}
+
+.xuenwu-question-card.is-wrong {
+  border-color: rgba(255, 157, 122, 0.42);
+}
+
 .xuenwu-action {
   display: grid;
   gap: 6px;
@@ -958,6 +1022,12 @@ body.light-theme .xuenwu-action,
 body.light-theme .xuenwu-composer {
   border-color: rgba(15, 23, 42, 0.12);
   background: rgba(255, 255, 255, 0.74);
+}
+
+body.light-theme .xuenwu-answer,
+body.light-theme .xuenwu-reference {
+  border-color: rgba(15, 23, 42, 0.12);
+  background: rgba(15, 23, 42, 0.03);
 }
 
 /* 进入问卷模式:让出整个左侧区域给问卷,问卷内部可滚动 */
