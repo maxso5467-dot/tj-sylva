@@ -295,11 +295,157 @@ class WrongQuestion(Base):
     review_item_id: Mapped[str | None] = mapped_column(
         String(64), ForeignKey("review_items.id", ondelete="SET NULL"), nullable=True
     )
+    practice_item_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("practice_items.id", ondelete="SET NULL"), nullable=True
+    )
     question: Mapped[str] = mapped_column(Text, nullable=False)
     student_answer: Mapped[str] = mapped_column(Text, nullable=False, default="")
     correct_answer: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    review_status: Mapped[str] = mapped_column(String(20), nullable=False, default="unresolved")
+    practice_mode: Mapped[str] = mapped_column(String(30), nullable=False, default="")
+    question_type: Mapped[str] = mapped_column(String(30), nullable=False, default="")
+    difficulty: Mapped[str] = mapped_column(String(20), nullable=False, default="")
+    result: Mapped[str] = mapped_column(String(20), nullable=False, default="wrong")
+    error_reason: Mapped[str] = mapped_column(String(40), nullable=False, default="")
+    source: Mapped[str] = mapped_column(String(30), nullable=False, default="")
+    review_status: Mapped[str] = mapped_column(String(20), nullable=False, default="to_review")
+    first_wrong_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_practiced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    consecutive_correct_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=now_utc, onupdate=now_utc, nullable=False
+    )
+
+
+class PracticeSession(Base):
+    """Xuenwu V1.0 智能练习批次。"""
+
+    __tablename__ = "practice_sessions"
+    __table_args__ = (
+        Index("ix_practice_sessions_user_session", "user_id", "session_id"),
+        Index("ix_practice_sessions_created", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("prac"))
+    user_id: Mapped[str] = mapped_column(String(64), ForeignKey("app_users.id", ondelete="CASCADE"), nullable=False)
+    session_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("learning_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    mode: Mapped[str] = mapped_column(String(30), nullable=False, default="current_progress")
+    target_node_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("knowledge_nodes.id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="generated")
+    question_count: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    config_version: Mapped[str] = mapped_column(String(40), nullable=False, default="v1.0")
+    ai_model: Mapped[str] = mapped_column(String(80), nullable=False, default="")
+    ai_generation_version: Mapped[str] = mapped_column(String(40), nullable=False, default="xuenwu-practice-v1")
+    source_plan: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    stats: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    feedback: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PracticeItem(Base):
+    """Xuenwu V1.0 智能练习题目。"""
+
+    __tablename__ = "practice_items"
+    __table_args__ = (
+        Index("ix_practice_items_practice", "practice_session_id"),
+        Index("ix_practice_items_node", "node_id"),
+        Index("ix_practice_items_basis", "generation_basis"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("q"))
+    practice_session_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("practice_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(String(64), ForeignKey("app_users.id", ondelete="CASCADE"), nullable=False)
+    session_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("learning_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    node_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("knowledge_nodes.id", ondelete="SET NULL"), nullable=True
+    )
+    generation_basis: Mapped[str] = mapped_column(String(40), nullable=False, default="CURRENT_NODE")
+    question_type: Mapped[str] = mapped_column(String(30), nullable=False, default="short_answer")
+    difficulty: Mapped[str] = mapped_column(String(20), nullable=False, default="basic")
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    standard_answer: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    explanation: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    options: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    answer_key: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    auto_gradable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    validation_status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    validation_errors: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    source: Mapped[str] = mapped_column(String(30), nullable=False, default="ai")
+    ai_model: Mapped[str] = mapped_column(String(80), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+
+
+class PracticeAttempt(Base):
+    """Xuenwu V1.0 智能练习作答记录。"""
+
+    __tablename__ = "practice_attempts"
+    __table_args__ = (
+        Index("ix_practice_attempts_item", "practice_item_id"),
+        Index("ix_practice_attempts_user", "user_id"),
+        Index("ix_practice_attempts_result", "final_result"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("pa"))
+    practice_item_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("practice_items.id", ondelete="CASCADE"), nullable=False
+    )
+    practice_session_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("practice_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(String(64), ForeignKey("app_users.id", ondelete="CASCADE"), nullable=False)
+    session_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("learning_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    node_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("knowledge_nodes.id", ondelete="SET NULL"), nullable=True
+    )
+    student_answer: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    ai_suggested_result: Mapped[str] = mapped_column(String(20), nullable=False, default="")
+    ai_feedback: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    student_confirmed_result: Mapped[str] = mapped_column(String(20), nullable=False, default="")
+    final_result: Mapped[str] = mapped_column(String(20), nullable=False, default="skipped")
+    score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_reason: Mapped[str] = mapped_column(String(40), nullable=False, default="")
+    used_hint: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    viewed_answer: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    time_spent_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+
+
+class NodeMastery(Base):
+    """Xuenwu V1.0 节点掌握状态。"""
+
+    __tablename__ = "node_mastery"
+    __table_args__ = (
+        Index("ix_node_mastery_user_session", "user_id", "session_id"),
+        Index("ix_node_mastery_node", "node_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("mst"))
+    user_id: Mapped[str] = mapped_column(String(64), ForeignKey("app_users.id", ondelete="CASCADE"), nullable=False)
+    session_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("learning_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    node_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("knowledge_nodes.id", ondelete="CASCADE"), nullable=False
+    )
+    mastery_state: Mapped[str] = mapped_column(String(20), nullable=False, default="not_started")
+    mastery_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    valid_attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    medium_or_hard_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    recent_window: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    correct_streak: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_practiced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=now_utc, onupdate=now_utc, nullable=False
     )
