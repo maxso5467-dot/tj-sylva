@@ -855,7 +855,7 @@ body.light-theme .ghost-button:hover {
   display: grid;
   gap: 10px;
   min-height: 0;
-  max-height: 34vh;
+  max-height: 46vh;
   overflow-y: auto;
   border: 1px solid var(--line);
   border-radius: var(--radius);

@@ -53,6 +53,14 @@
           <span class="rail-label">AI 学习助手</span>
           <span class="rail-dot" aria-label="有复习提醒"></span>
         </button>
+        <button id="xuenwu-practice-entry" class="rail-button rail-action xuenwu-entry" type="button" title="打开智能练习">
+          <span class="rail-icon">▣</span>
+          <span class="rail-label">智能练习</span>
+        </button>
+        <button id="xuenwu-wrongbook-entry" class="rail-button rail-action xuenwu-entry" type="button" title="打开错题本">
+          <span class="rail-icon">※</span>
+          <span class="rail-label">错题本</span>
+        </button>
         <label class="sidebar-search">
           <span>搜索标题</span>
           <input id="session-search" type="search" autocomplete="off" placeholder="输入关键词" />
@@ -114,21 +122,17 @@
               <h2>你好，admin</h2>
               <p>我会根据当前学习地图、最近节点和错题记录，帮你安排轻量复习。</p>
               <div class="xuenwu-actions">
-                <button class="xuenwu-action" type="button" data-xuenwu-prompt="开始今日轻量复习">
-                  <span>开始今日轻量复习</span>
-                  <em>概念回顾、基础题和稍复杂题混合</em>
+                <button class="xuenwu-action" type="button" data-xuenwu-nav="practice">
+                  <span>去做 5 道智能练习</span>
+                  <em>根据当前学习路线和知识节点出题</em>
                 </button>
-                <button class="xuenwu-action" type="button" data-xuenwu-prompt="根据学习进度出5道题">
-                  <span>根据学习进度出 5 道题</span>
-                  <em>从当前学习地图和最近节点里抽题练习</em>
+                <button class="xuenwu-action" type="button" data-xuenwu-nav="wrongbook">
+                  <span>查看错题本</span>
+                  <em>整理错题、答案和反思记录</em>
                 </button>
-                <button class="xuenwu-action" type="button" data-xuenwu-prompt="回顾最近知识节点">
-                  <span>回顾最近知识节点</span>
-                  <em>从最近学过的节点中抓重点过一遍</em>
-                </button>
-                <button class="xuenwu-action" type="button" data-xuenwu-prompt="查看错题与反思">
-                  <span>查看错题与反思</span>
-                  <em>回顾错题、补充想法、生成类似题</em>
+                <button class="xuenwu-action" type="button" data-xuenwu-prompt="今天该复习什么">
+                  <span>问问今天该复习什么</span>
+                  <em>根据当前地图和错题情况给出建议</em>
                 </button>
               </div>
             </section>
@@ -137,6 +141,58 @@
               <textarea id="xuenwu-input" rows="1" placeholder="问我今天该复习什么..."></textarea>
               <button class="send-button" type="submit" title="发送">↑</button>
             </form>
+          </div>
+        </section>
+
+        <section id="xuenwu-practice" class="xuenwu-assistant hidden" aria-label="智能练习">
+          <div class="xuenwu-shell">
+            <header class="xuenwu-head">
+              <div>
+                <p class="xuenwu-kicker">Xuenwu Practice</p>
+                <h1>智能练习</h1>
+                <span id="xuenwu-practice-current-map">当前地图：未选择</span>
+              </div>
+            </header>
+            <div class="xuenwu-notice">
+              <span>根据当前学习路线和知识节点生成练习，做错后自动进入错题本。</span>
+            </div>
+            <section class="xuenwu-hero" aria-label="智能练习操作">
+              <h2>按学习进度练一组</h2>
+              <p>第一版先生成 5 道题：概念、基础题、节点题、前置检查和稍复杂题。</p>
+              <div class="xuenwu-actions">
+                <button id="xuenwu-generate-practice" class="xuenwu-action" type="button">
+                  <span>根据当前学习进度出 5 道题</span>
+                  <em>题目来自当前地图、最近节点和前置知识</em>
+                </button>
+              </div>
+            </section>
+            <section id="xuenwu-practice-results" class="xuenwu-results hidden" aria-live="polite"></section>
+          </div>
+        </section>
+
+        <section id="xuenwu-wrongbook" class="xuenwu-assistant hidden" aria-label="错题本">
+          <div class="xuenwu-shell">
+            <header class="xuenwu-head">
+              <div>
+                <p class="xuenwu-kicker">Xuenwu Wrongbook</p>
+                <h1>错题本</h1>
+                <span id="xuenwu-wrongbook-current-map">当前地图：未选择</span>
+              </div>
+            </header>
+            <div class="xuenwu-notice">
+              <span>这里专门整理智能练习里的错题、你的答案、参考答案和后续反思。</span>
+            </div>
+            <section class="xuenwu-hero" aria-label="错题本操作">
+              <h2>复盘做错的题</h2>
+              <p>先把错题集中看清楚，后面再加类似题和 AI 讲解。</p>
+              <div class="xuenwu-actions">
+                <button id="xuenwu-refresh-wrongbook" class="xuenwu-action" type="button">
+                  <span>刷新当前地图错题</span>
+                  <em>读取智能练习中标记做错的题目</em>
+                </button>
+              </div>
+            </section>
+            <section id="xuenwu-wrongbook-results" class="xuenwu-results hidden" aria-live="polite"></section>
           </div>
         </section>
 
@@ -314,6 +370,6 @@
       </button>
     </div>
 
-    <script src="/static/app.js?v=20260713-xuenwu-quiz" type="module"></script>
+    <script src="/static/app.js?v=20260714-xuenwu-practice-wrongbook" type="module"></script>
   </body>
 </html>

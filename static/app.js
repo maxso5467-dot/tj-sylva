@@ -86,11 +86,21 @@ const selectionMenu = $("#selection-menu");
 const backgroundQuiz = $("#background-quiz");
 const topicPreviewEl = $("#topic-preview");
 const xuenwuEntry = $("#xuenwu-assistant-entry");
+const xuenwuPracticeEntry = $("#xuenwu-practice-entry");
+const xuenwuWrongbookEntry = $("#xuenwu-wrongbook-entry");
 const xuenwuAssistant = $("#xuenwu-assistant");
+const xuenwuPractice = $("#xuenwu-practice");
+const xuenwuWrongbook = $("#xuenwu-wrongbook");
 const xuenwuCurrentMap = $("#xuenwu-current-map");
+const xuenwuPracticeCurrentMap = $("#xuenwu-practice-current-map");
+const xuenwuWrongbookCurrentMap = $("#xuenwu-wrongbook-current-map");
 const xuenwuForm = $("#xuenwu-form");
 const xuenwuInput = $("#xuenwu-input");
 const xuenwuResults = $("#xuenwu-results");
+const xuenwuPracticeResults = $("#xuenwu-practice-results");
+const xuenwuWrongbookResults = $("#xuenwu-wrongbook-results");
+const xuenwuGeneratePractice = $("#xuenwu-generate-practice");
+const xuenwuRefreshWrongbook = $("#xuenwu-refresh-wrongbook");
 
 document.body.classList.toggle("light-theme", state.theme === "light");
 appShell.classList.toggle("sidebar-collapsed", state.sidebarCollapsed);
@@ -110,6 +120,8 @@ function hydrateStaticTooltips() {
     ["#sidebar-toggle", "收起或打开左侧边栏"],
     ["#new-session", "新建一张学习地图"],
     ["#xuenwu-assistant-entry", "打开 AI 学习助手"],
+    ["#xuenwu-practice-entry", "打开智能练习"],
+    ["#xuenwu-wrongbook-entry", "打开错题本"],
     ["#theme-toggle", "切换深色 / 浅色主题"],
     ["#avatar-button", "打开用户菜单"],
     ["#mode-button", "切换思维深度"],
@@ -1898,25 +1910,37 @@ $("#new-session").addEventListener("click", () => {
   render();
 });
 
-function openXuenwuAssistant() {
-  setActiveView("xuenwu");
+function openXuenwuView(view) {
+  setActiveView(view);
   closeModePopover();
   userMenu?.classList.add("hidden");
   closeAllPeekPopovers();
   closeSubdividePopover();
   closeNodeComposer();
   render();
-  requestAnimationFrame(() => xuenwuInput?.focus());
+  if (view === "xuenwu") requestAnimationFrame(() => xuenwuInput?.focus());
+  if (view === "wrongbook") loadXuenwuWrongQuestions(xuenwuWrongbookResults);
 }
 
-xuenwuEntry?.addEventListener("click", openXuenwuAssistant);
+xuenwuEntry?.addEventListener("click", () => openXuenwuView("xuenwu"));
+xuenwuPracticeEntry?.addEventListener("click", () => openXuenwuView("practice"));
+xuenwuWrongbookEntry?.addEventListener("click", () => openXuenwuView("wrongbook"));
 
 document.addEventListener("click", (event) => {
-  if (!event.target.closest?.("#xuenwu-assistant-entry")) return;
+  const entry = event.target.closest?.("#xuenwu-assistant-entry, #xuenwu-practice-entry, #xuenwu-wrongbook-entry");
+  if (!entry) return;
   event.preventDefault();
   event.stopPropagation();
-  openXuenwuAssistant();
+  const view = entry.id === "xuenwu-practice-entry"
+    ? "practice"
+    : entry.id === "xuenwu-wrongbook-entry"
+      ? "wrongbook"
+      : "xuenwu";
+  openXuenwuView(view);
 }, true);
+
+xuenwuGeneratePractice?.addEventListener("click", () => generateXuenwuReviewItems(xuenwuPracticeResults));
+xuenwuRefreshWrongbook?.addEventListener("click", () => loadXuenwuWrongQuestions(xuenwuWrongbookResults));
 
 xuenwuForm?.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -1942,6 +1966,12 @@ document.querySelectorAll("[data-xuenwu-prompt]").forEach((button) => {
     resizeXuenwuInput();
     xuenwuInput.focus();
     xuenwuForm?.requestSubmit();
+  });
+});
+
+document.querySelectorAll("[data-xuenwu-nav]").forEach((button) => {
+  button.addEventListener("click", () => {
+    openXuenwuView(button.dataset.xuenwuNav || "xuenwu");
   });
 });
 
@@ -2665,10 +2695,17 @@ function setZoom(next) {
 function render() {
   const hasSession = Boolean(state.sessionId) || state.generatingTree;
   const assistantOpen = state.activeView === "xuenwu";
-  starter.classList.toggle("hidden", assistantOpen || hasSession);
-  workspace.classList.toggle("hidden", assistantOpen || !hasSession);
+  const practiceOpen = state.activeView === "practice";
+  const wrongbookOpen = state.activeView === "wrongbook";
+  const xuenwuOpen = assistantOpen || practiceOpen || wrongbookOpen;
+  starter.classList.toggle("hidden", xuenwuOpen || hasSession);
+  workspace.classList.toggle("hidden", xuenwuOpen || !hasSession);
   xuenwuAssistant?.classList.toggle("hidden", !assistantOpen);
+  xuenwuPractice?.classList.toggle("hidden", !practiceOpen);
+  xuenwuWrongbook?.classList.toggle("hidden", !wrongbookOpen);
   xuenwuEntry?.classList.toggle("active", assistantOpen);
+  xuenwuPracticeEntry?.classList.toggle("active", practiceOpen);
+  xuenwuWrongbookEntry?.classList.toggle("active", wrongbookOpen);
   renderXuenwuAssistant();
   renderMessages();
   renderTree();
@@ -2676,16 +2713,17 @@ function render() {
 }
 
 function setActiveView(view) {
-  state.activeView = view === "xuenwu" ? "xuenwu" : "map";
+  state.activeView = ["xuenwu", "practice", "wrongbook"].includes(view) ? view : "map";
   localStorage.setItem("km.activeView", state.activeView);
 }
 
 function renderXuenwuAssistant() {
-  if (!xuenwuCurrentMap) return;
   const currentSession = state.sessions.find((session) => session.id === state.sessionId);
   const root = state.nodes.find((node) => !node.parent_id) || state.nodes[0];
   const title = currentSession?.title || currentSession?.field || root?.title || "未选择";
-  xuenwuCurrentMap.textContent = `当前地图：${title}`;
+  [xuenwuCurrentMap, xuenwuPracticeCurrentMap, xuenwuWrongbookCurrentMap].forEach((element) => {
+    if (element) element.textContent = `当前地图：${title}`;
+  });
 }
 
 function resizeXuenwuInput() {
@@ -2701,17 +2739,32 @@ async function handleXuenwuPrompt(prompt) {
   }
   try {
     if (prompt.includes("错题") || prompt.includes("反思")) {
-      await loadXuenwuWrongQuestions();
+      openXuenwuView("wrongbook");
       return;
     }
-    await generateXuenwuReviewItems();
+    if (prompt.includes("题") || prompt.includes("练习")) {
+      openXuenwuView("practice");
+      await generateXuenwuReviewItems(xuenwuPracticeResults);
+      return;
+    }
+    renderXuenwuResults([
+      {
+        meta: "学习建议",
+        content: "建议先在「智能练习」按当前学习进度做 5 道题，再去「错题本」复盘做错的题。",
+        detail: "AI 学习助手负责调度和建议；具体做题进入智能练习，错题整理进入错题本。",
+      },
+    ]);
   } catch (error) {
     renderXuenwuResults([{ content: `学习助手暂时不可用:${error.message}`, meta: "请求失败" }]);
   }
 }
 
-async function generateXuenwuReviewItems() {
-  renderXuenwuResults([{ content: "正在根据当前学习地图和最近知识节点生成 5 道练习...", meta: "生成中" }]);
+async function generateXuenwuReviewItems(host = xuenwuPracticeResults) {
+  if (!state.sessionId) {
+    renderXuenwuResults([{ content: "请先在左侧选择一张学习地图，再生成练习。", meta: "未选择地图" }], host);
+    return;
+  }
+  renderXuenwuResults([{ content: "正在根据当前学习地图和最近知识节点生成 5 道练习...", meta: "生成中" }], host);
   const response = await fetch(`/api/xuenwu/sessions/${state.sessionId}/review-items/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -2719,17 +2772,21 @@ async function generateXuenwuReviewItems() {
   });
   if (!response.ok) throw new Error(await response.text());
   const payload = await response.json();
-  renderXuenwuReviewItems(payload.items || []);
+  renderXuenwuReviewItems(payload.items || [], host);
 }
 
-async function loadXuenwuWrongQuestions() {
-  renderXuenwuResults([{ content: "正在读取当前学习地图的错题与反思...", meta: "读取中" }]);
+async function loadXuenwuWrongQuestions(host = xuenwuWrongbookResults) {
+  if (!state.sessionId) {
+    renderXuenwuResults([{ content: "请先在左侧选择一张学习地图，再查看错题本。", meta: "未选择地图" }], host);
+    return;
+  }
+  renderXuenwuResults([{ content: "正在读取当前学习地图的错题与反思...", meta: "读取中" }], host);
   const response = await fetch(`/api/xuenwu/sessions/${state.sessionId}/wrong-questions`);
   if (!response.ok) throw new Error(await response.text());
   const payload = await response.json();
   const items = payload.items || [];
   if (!items.length) {
-    renderXuenwuResults([{ content: "当前学习地图还没有错题记录。", meta: "错题本" }]);
+    renderXuenwuResults([{ content: "当前学习地图还没有错题记录。先去智能练习做题，标记做错后会自动进入这里。", meta: "错题本" }], host);
     return;
   }
   renderXuenwuResults(
@@ -2738,13 +2795,14 @@ async function loadXuenwuWrongQuestions() {
       meta: `错题 · ${item.review_status === "resolved" ? "已掌握" : "待复习"}`,
       detail: `你的答案:${item.student_answer || "未记录"} / 参考:${item.correct_answer || "暂无"}`,
     })),
+    host,
   );
 }
 
-function renderXuenwuResults(items) {
-  if (!xuenwuResults) return;
-  xuenwuResults.innerHTML = "";
-  xuenwuResults.classList.remove("hidden");
+function renderXuenwuResults(items, host = xuenwuResults) {
+  if (!host) return;
+  host.innerHTML = "";
+  host.classList.remove("hidden");
   for (const item of items) {
     const row = document.createElement("article");
     row.className = "xuenwu-result-item";
@@ -2753,16 +2811,16 @@ function renderXuenwuResults(items) {
       <strong>${escapeHtml(item.content || "")}</strong>
       ${item.detail ? `<p>${escapeHtml(item.detail)}</p>` : ""}
     `;
-    xuenwuResults.append(row);
+    host.append(row);
   }
 }
 
-function renderXuenwuReviewItems(items) {
-  if (!xuenwuResults) return;
-  xuenwuResults.innerHTML = "";
-  xuenwuResults.classList.remove("hidden");
+function renderXuenwuReviewItems(items, host = xuenwuPracticeResults) {
+  if (!host) return;
+  host.innerHTML = "";
+  host.classList.remove("hidden");
   if (!items.length) {
-    renderXuenwuResults([{ content: "当前学习地图还没有可生成题目的知识节点。", meta: "暂无题目" }]);
+    renderXuenwuResults([{ content: "当前学习地图还没有可生成题目的知识节点。", meta: "暂无题目" }], host);
     return;
   }
   items.forEach((item, index) => {
@@ -2791,7 +2849,7 @@ function renderXuenwuReviewItems(items) {
     row.querySelectorAll("[data-xuenwu-submit]").forEach((button) => {
       button.addEventListener("click", () => submitXuenwuAttempt(row, item, button.dataset.xuenwuSubmit === "correct"));
     });
-    xuenwuResults.append(row);
+    host.append(row);
   });
 }
 
@@ -2820,7 +2878,7 @@ async function submitXuenwuAttempt(row, item, isCorrect) {
     row.classList.add(isCorrect ? "is-correct" : "is-wrong");
     statusEl.textContent = isCorrect
       ? "已记录为做对。"
-      : `已加入错题本，后面可以在「查看错题与反思」里复习。${payload.wrong_question_id ? "" : ""}`;
+      : `已加入错题本，后面可以在左侧「错题本」里复习。${payload.wrong_question_id ? "" : ""}`;
     statusEl.className = "xuenwu-submit-state ok";
   } catch (error) {
     buttons.forEach((button) => { button.disabled = false; });
