@@ -2698,6 +2698,7 @@ function render() {
   const practiceOpen = state.activeView === "practice";
   const wrongbookOpen = state.activeView === "wrongbook";
   const xuenwuOpen = assistantOpen || practiceOpen || wrongbookOpen;
+  appShell.classList.toggle("xuenwu-wide", practiceOpen || wrongbookOpen);
   starter.classList.toggle("hidden", xuenwuOpen || hasSession);
   workspace.classList.toggle("hidden", xuenwuOpen || !hasSession);
   xuenwuAssistant?.classList.toggle("hidden", !assistantOpen);
@@ -2764,7 +2765,7 @@ async function generateXuenwuReviewItems(host = xuenwuPracticeResults) {
     renderXuenwuResults([{ content: "请先在左侧选择一张学习地图，再生成练习。", meta: "未选择地图" }], host);
     return;
   }
-  renderXuenwuResults([{ content: "正在根据当前学习地图和最近知识节点生成 5 道练习...", meta: "生成中" }], host);
+  renderXuenwuResults([{ content: "正在根据当前学习地图和最近知识节点生成 5 道考试风格练习题...", meta: "AI 出题中" }], host);
   const response = await fetch(`/api/xuenwu/sessions/${state.sessionId}/review-items/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

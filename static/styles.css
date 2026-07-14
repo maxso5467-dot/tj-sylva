@@ -163,6 +163,15 @@ button {
   --sidebar-width: 56px;
 }
 
+.app-shell.xuenwu-wide {
+  grid-template-columns: var(--sidebar-width, 300px) minmax(0, 1fr) 0 0;
+}
+
+.app-shell.xuenwu-wide .splitter,
+.app-shell.xuenwu-wide .map-pane {
+  display: none;
+}
+
 body.light-theme .app-shell {
   background:
     radial-gradient(circle at 20% 55%, rgba(59, 130, 246, 0.12), transparent 26%),
