@@ -16,6 +16,10 @@ from app.db.models import (
     KnowledgeNode,
     LearningReflection,
     LearningSession,
+    NodeMastery,
+    PracticeAttempt,
+    PracticeItem,
+    PracticeSession,
     ReviewAttempt,
     ReviewItem,
     WrongQuestion,
@@ -23,6 +27,14 @@ from app.db.models import (
 )
 from app.schemas.xuenwu import (
     GenerateReviewIn,
+    NodeMasteryListOut,
+    PracticeAttemptOut,
+    PracticeAttemptSubmitIn,
+    PracticeFinishOut,
+    PracticeItemOut,
+    PracticeSessionCreateIn,
+    PracticeSessionDetailOut,
+    PracticeSessionOut,
     ReflectionIn,
     ReflectionOut,
     ReviewAttemptOut,
@@ -117,6 +129,119 @@ def _fallback_exam_questions(session: LearningSession, nodes: list[KnowledgeNode
     return questions
 
 
+def _score_for_result(result: str) -> int:
+    return {
+        "correct": 100,
+        "partial": 50,
+        "wrong": 0,
+        "unknown": 0,
+        "skipped": 0,
+    }.get(result, 0)
+
+
+def _question_type_for_content(content: str) -> tuple[str, bool]:
+    text = content.strip()
+    if all(option in text for option in ("A", "B", "C", "D")):
+        return "choice", True
+    if "填空" in text:
+        return "fill_blank", True
+    if "计算" in text or "求" in text:
+        return "calculation", False
+    if "代码" in text or "程序" in text:
+        return "code", False
+    return "short_answer", False
+
+
+def _mastery_state(score: int, valid_count: int, medium_or_hard_count: int) -> str:
+    if valid_count <= 0:
+        return "not_started"
+    if valid_count < 5:
+        return "learning"
+    if score < 60:
+        return "needs_consolidation"
+    if score < 90:
+        return "basic_mastery" if medium_or_hard_count >= 2 else "learning"
+    return "fluent_mastery" if medium_or_hard_count >= 5 else "basic_mastery"
+
+
+async def _practice_items(db: AsyncSession, practice_session_id: str) -> list[PracticeItem]:
+    result = await db.execute(
+        select(PracticeItem)
+        .where(PracticeItem.practice_session_id == practice_session_id)
+        .order_by(PracticeItem.created_at.asc(), PracticeItem.id.asc())
+    )
+    return list(result.scalars().all())
+
+
+async def _require_owned_practice_session(
+    db: AsyncSession, practice_session_id: str, user: AppUser
+) -> PracticeSession:
+    practice = await db.get(PracticeSession, practice_session_id)
+    if practice is None or practice.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="练习批次不存在")
+    return practice
+
+
+async def _update_node_mastery(db: AsyncSession, *, user: AppUser, node_id: str | None) -> NodeMastery | None:
+    if not node_id:
+        return None
+    result = await db.execute(
+        select(PracticeAttempt)
+        .where(PracticeAttempt.user_id == user.id, PracticeAttempt.node_id == node_id)
+        .order_by(PracticeAttempt.created_at.desc())
+        .limit(10)
+    )
+    attempts = list(result.scalars().all())
+    valid = attempts
+    valid_count = len(valid)
+    score = round(sum(a.score for a in valid) / valid_count) if valid_count else 0
+
+    item_ids = [a.practice_item_id for a in valid]
+    medium_or_hard_count = 0
+    if item_ids:
+        item_result = await db.execute(select(PracticeItem).where(PracticeItem.id.in_(item_ids)))
+        items_by_id = {item.id: item for item in item_result.scalars().all()}
+        medium_or_hard_count = sum(
+            1
+            for attempt in valid
+            if items_by_id.get(attempt.practice_item_id)
+            and items_by_id[attempt.practice_item_id].difficulty in {"medium", "hard"}
+        )
+
+    mastery_result = await db.execute(
+        select(NodeMastery).where(
+            NodeMastery.user_id == user.id,
+            NodeMastery.node_id == node_id,
+        )
+    )
+    mastery = mastery_result.scalars().first()
+    if mastery is None:
+        attempt = valid[0] if valid else None
+        mastery = NodeMastery(
+            user_id=user.id,
+            session_id=attempt.session_id if attempt else "",
+            node_id=node_id,
+        )
+        db.add(mastery)
+
+    mastery.mastery_score = score
+    mastery.valid_attempt_count = valid_count
+    mastery.medium_or_hard_count = medium_or_hard_count
+    mastery.recent_window = [
+        {"attempt_id": a.id, "result": a.final_result, "score": a.score, "created_at": a.created_at.isoformat()}
+        for a in reversed(valid)
+    ]
+    mastery.correct_streak = 0
+    for attempt in attempts:
+        if attempt.final_result == "correct":
+            mastery.correct_streak += 1
+        else:
+            break
+    mastery.mastery_state = _mastery_state(score, valid_count, medium_or_hard_count)
+    mastery.last_practiced_at = attempts[0].created_at if attempts else None
+    return mastery
+
+
 async def _ai_exam_questions(
     *,
     service: KnowledgeMapService,
@@ -203,6 +328,239 @@ async def _ai_exam_questions(
     if not items:
         raise ValueError("AI 未生成有效题目")
     return items
+
+
+@router.post(
+    "/sessions/{session_id}/practice-sessions",
+    response_model=PracticeSessionDetailOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_practice_session(
+    session_id: str,
+    payload: PracticeSessionCreateIn,
+    db: AsyncSession = Depends(get_session),
+    user: AppUser = Depends(get_current_user),
+    service: KnowledgeMapService = Depends(get_service),
+) -> PracticeSessionDetailOut:
+    session = await _require_owned_session(db, session_id, user)
+    nodes = await _session_nodes(db, session_id)
+    usable_nodes = [node for node in nodes if node.parent_id] or nodes
+    if not usable_nodes:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="当前学习地图还没有知识节点")
+
+    if payload.mode == "specified_node" and payload.target_node_id:
+        if not any(node.id == payload.target_node_id for node in nodes):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="指定节点不属于当前学习地图")
+
+    target_node_id = payload.target_node_id or session.current_node_id or usable_nodes[0].id
+    source_plan = {
+        "mode": payload.mode,
+        "target_node_id": target_node_id,
+        "question_count": payload.question_count,
+        "default_difficulty": ["basic", "basic", "medium", "medium", "hard"][: payload.question_count],
+        "basis_plan": (
+            ["SPECIFIED_NODE"] * payload.question_count
+            if payload.mode == "specified_node"
+            else ["CURRENT_NODE", "CURRENT_NODE", "COMPLETED_NODE", "WEAK_PREREQUISITE", "WRONG_KNOWLEDGE_POINT"][
+                : payload.question_count
+            ]
+        ),
+    }
+    practice = PracticeSession(
+        user_id=user.id,
+        session_id=session.id,
+        mode=payload.mode,
+        target_node_id=target_node_id,
+        question_count=payload.question_count,
+        source_plan=source_plan,
+    )
+    db.add(practice)
+    await db.flush()
+
+    try:
+        generated = await _ai_exam_questions(
+            service=service,
+            db=db,
+            session=session,
+            nodes=nodes,
+            count=payload.question_count,
+        )
+    except Exception as exc:  # noqa: BLE001
+        print(f"[xuenwu] practice AI question fallback: {exc}")
+        generated = _fallback_exam_questions(session, nodes, payload.question_count)
+
+    basis_plan = source_plan["basis_plan"]
+    items: list[PracticeItem] = []
+    for index, raw in enumerate(generated[: payload.question_count]):
+        question_type, auto_gradable = _question_type_for_content(raw["content"])
+        item = PracticeItem(
+            practice_session_id=practice.id,
+            user_id=user.id,
+            session_id=session.id,
+            node_id=raw["node_id"],
+            generation_basis=basis_plan[index] if index < len(basis_plan) else "CURRENT_NODE",
+            question_type=question_type,
+            difficulty=raw["difficulty"],
+            content=raw["content"],
+            standard_answer=raw["answer"],
+            explanation=raw["explanation"],
+            answer_key=raw["answer"][:255],
+            auto_gradable=auto_gradable,
+            validation_status="passed",
+            source=raw["source"],
+            ai_model=service.ai_client._model(),
+        )
+        db.add(item)
+        items.append(item)
+
+    await db.commit()
+    await db.refresh(practice)
+    for item in items:
+        await db.refresh(item)
+    return PracticeSessionDetailOut(
+        session=PracticeSessionOut.model_validate(practice),
+        items=[PracticeItemOut.model_validate(item) for item in items],
+    )
+
+
+@router.get("/practice-sessions/{practice_session_id}", response_model=PracticeSessionDetailOut)
+async def get_practice_session(
+    practice_session_id: str,
+    db: AsyncSession = Depends(get_session),
+    user: AppUser = Depends(get_current_user),
+) -> PracticeSessionDetailOut:
+    practice = await _require_owned_practice_session(db, practice_session_id, user)
+    items = await _practice_items(db, practice.id)
+    return PracticeSessionDetailOut(
+        session=PracticeSessionOut.model_validate(practice),
+        items=[PracticeItemOut.model_validate(item) for item in items],
+    )
+
+
+@router.post("/practice-items/{practice_item_id}/attempts", response_model=PracticeAttemptOut)
+async def submit_practice_attempt(
+    practice_item_id: str,
+    payload: PracticeAttemptSubmitIn,
+    db: AsyncSession = Depends(get_session),
+    user: AppUser = Depends(get_current_user),
+) -> PracticeAttemptOut:
+    item = await db.get(PracticeItem, practice_item_id)
+    if item is None or item.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="练习题不存在")
+    practice = await _require_owned_practice_session(db, item.practice_session_id, user)
+    final_result = payload.student_confirmed_result
+    attempt = PracticeAttempt(
+        practice_item_id=item.id,
+        practice_session_id=practice.id,
+        user_id=user.id,
+        session_id=item.session_id,
+        node_id=item.node_id,
+        student_answer=payload.student_answer,
+        ai_suggested_result=payload.ai_suggested_result or "",
+        ai_feedback=payload.ai_feedback,
+        student_confirmed_result=payload.student_confirmed_result,
+        final_result=final_result,
+        score=_score_for_result(final_result),
+        error_reason=payload.error_reason,
+        used_hint=payload.used_hint,
+        viewed_answer=payload.viewed_answer,
+        attempt_count=payload.attempt_count,
+        time_spent_seconds=payload.time_spent_seconds,
+    )
+    db.add(attempt)
+
+    if final_result in {"partial", "wrong", "unknown"}:
+        wrong = WrongQuestion(
+            user_id=user.id,
+            session_id=item.session_id,
+            node_id=item.node_id,
+            practice_item_id=item.id,
+            question=item.content,
+            student_answer=payload.student_answer,
+            correct_answer=item.standard_answer,
+            practice_mode=practice.mode,
+            question_type=item.question_type,
+            difficulty=item.difficulty,
+            result=final_result,
+            error_reason=payload.error_reason,
+            source=item.source,
+            review_status="to_review",
+            first_wrong_at=now_utc(),
+            last_practiced_at=now_utc(),
+        )
+        db.add(wrong)
+
+    await db.flush()
+    await _update_node_mastery(db, user=user, node_id=item.node_id)
+    await db.commit()
+    await db.refresh(attempt)
+    return PracticeAttemptOut.model_validate(attempt)
+
+
+@router.post("/practice-sessions/{practice_session_id}/finish", response_model=PracticeFinishOut)
+async def finish_practice_session(
+    practice_session_id: str,
+    db: AsyncSession = Depends(get_session),
+    user: AppUser = Depends(get_current_user),
+) -> PracticeFinishOut:
+    practice = await _require_owned_practice_session(db, practice_session_id, user)
+    result = await db.execute(
+        select(PracticeAttempt).where(
+            PracticeAttempt.practice_session_id == practice.id,
+            PracticeAttempt.user_id == user.id,
+        )
+    )
+    attempts = list(result.scalars().all())
+    counts = {"correct": 0, "partial": 0, "wrong": 0, "unknown": 0, "skipped": 0}
+    for attempt in attempts:
+        counts[attempt.final_result] = counts.get(attempt.final_result, 0) + 1
+    total_questions = max(practice.question_count, 1)
+    answered = len(attempts)
+    score = round(sum(attempt.score for attempt in attempts) / total_questions)
+    completion_rate = round(answered / total_questions * 100)
+    node_scores: dict[str, list[int]] = {}
+    for attempt in attempts:
+        if attempt.node_id:
+            node_scores.setdefault(attempt.node_id, []).append(attempt.score)
+    weak_nodes = [
+        {"node_id": node_id, "score": round(sum(scores) / len(scores))}
+        for node_id, scores in node_scores.items()
+        if scores and round(sum(scores) / len(scores)) < 60
+    ]
+    stats = {
+        "score": score,
+        "completion_rate": completion_rate,
+        "answered": answered,
+        "total": total_questions,
+        "result_counts": counts,
+        "weak_nodes": weak_nodes,
+    }
+    feedback = {
+        "summary": f"本次练习得分 {score}%，完成率 {completion_rate}%。",
+        "next_action": "优先复习薄弱节点后再继续学习。" if weak_nodes else "可以继续当前学习路线。",
+    }
+    practice.status = "completed"
+    practice.completed_at = now_utc()
+    practice.stats = stats
+    practice.feedback = feedback
+    await db.commit()
+    await db.refresh(practice)
+    return PracticeFinishOut(session=PracticeSessionOut.model_validate(practice), stats=stats, feedback=feedback)
+
+
+@router.get("/sessions/{session_id}/node-mastery", response_model=NodeMasteryListOut)
+async def list_node_mastery(
+    session_id: str,
+    db: AsyncSession = Depends(get_session),
+    user: AppUser = Depends(get_current_user),
+) -> NodeMasteryListOut:
+    await _require_owned_session(db, session_id, user)
+    result = await db.execute(
+        select(NodeMastery)
+        .where(NodeMastery.user_id == user.id, NodeMastery.session_id == session_id)
+        .order_by(NodeMastery.updated_at.desc())
+    )
+    return NodeMasteryListOut(items=list(result.scalars().all()))
 
 
 @router.get("/sessions/{session_id}/review-items", response_model=ReviewItemsOut)
