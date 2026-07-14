@@ -98,6 +98,7 @@ const xuenwuForm = $("#xuenwu-form");
 const xuenwuInput = $("#xuenwu-input");
 const xuenwuResults = $("#xuenwu-results");
 const xuenwuPracticeResults = $("#xuenwu-practice-results");
+const xuenwuPracticeSummary = $("#xuenwu-practice-summary");
 const xuenwuWrongbookResults = $("#xuenwu-wrongbook-results");
 const xuenwuGeneratePractice = $("#xuenwu-generate-practice");
 const xuenwuRefreshWrongbook = $("#xuenwu-refresh-wrongbook");
@@ -2765,15 +2766,16 @@ async function generateXuenwuReviewItems(host = xuenwuPracticeResults) {
     renderXuenwuResults([{ content: "请先在左侧选择一张学习地图，再生成练习。", meta: "未选择地图" }], host);
     return;
   }
+  if (xuenwuPracticeSummary) xuenwuPracticeSummary.classList.add("hidden");
   renderXuenwuResults([{ content: "正在根据当前学习地图和最近知识节点生成 5 道考试风格练习题...", meta: "AI 出题中" }], host);
-  const response = await fetch(`/api/xuenwu/sessions/${state.sessionId}/review-items/generate`, {
+  const response = await fetch(`/api/xuenwu/sessions/${state.sessionId}/practice-sessions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ count: 5 }),
+    body: JSON.stringify({ mode: "current_progress", question_count: 5 }),
   });
   if (!response.ok) throw new Error(await response.text());
   const payload = await response.json();
-  renderXuenwuReviewItems(payload.items || [], host);
+  renderXuenwuReviewItems(payload.items || [], host, payload.session);
 }
 
 async function loadXuenwuWrongQuestions(host = xuenwuWrongbookResults) {
@@ -2793,7 +2795,7 @@ async function loadXuenwuWrongQuestions(host = xuenwuWrongbookResults) {
   renderXuenwuResults(
     items.map((item) => ({
       content: item.question,
-      meta: `错题 · ${item.review_status === "resolved" ? "已掌握" : "待复习"}`,
+      meta: `错题 · ${item.review_status === "mastered" ? "已掌握" : "待复习"}`,
       detail: `你的答案:${item.student_answer || "未记录"} / 参考:${item.correct_answer || "暂无"}`,
     })),
     host,
@@ -2816,7 +2818,7 @@ function renderXuenwuResults(items, host = xuenwuResults) {
   }
 }
 
-function renderXuenwuReviewItems(items, host = xuenwuPracticeResults) {
+function renderXuenwuReviewItems(items, host = xuenwuPracticeResults, practiceSession = null) {
   if (!host) return;
   host.innerHTML = "";
   host.classList.remove("hidden");
@@ -2827,39 +2829,57 @@ function renderXuenwuReviewItems(items, host = xuenwuPracticeResults) {
   items.forEach((item, index) => {
     const row = document.createElement("article");
     row.className = "xuenwu-result-item xuenwu-question-card";
-    row.dataset.reviewItemId = item.id;
+    row.dataset.practiceItemId = item.id;
     row.innerHTML = `
       <div class="xuenwu-result-meta">
         <span>第 ${index + 1} 题</span>
-        <span>${escapeHtml(reviewTypeLabel(item.item_type))}</span>
+        <span>${escapeHtml(questionTypeLabel(item.question_type || item.item_type))}</span>
         <span>${escapeHtml(difficultyLabel(item.difficulty))}</span>
+        <span>${escapeHtml(item.generation_basis || "")}</span>
       </div>
       <strong>${escapeHtml(item.content || "")}</strong>
       ${item.explanation ? `<p>${escapeHtml(item.explanation)}</p>` : ""}
       <textarea class="xuenwu-answer" rows="3" placeholder="把你的答案或思路写在这里..."></textarea>
       <details class="xuenwu-reference">
         <summary>查看参考答案</summary>
-        <p>${escapeHtml(item.answer || "暂无参考答案")}</p>
+        <p>${escapeHtml(item.standard_answer || item.answer || "暂无参考答案")}</p>
       </details>
       <div class="xuenwu-question-actions">
-        <button type="button" class="ghost-button" data-xuenwu-submit="wrong">做错了，加入错题本</button>
-        <button type="button" class="primary-button" data-xuenwu-submit="correct">做对了</button>
+        <button type="button" class="ghost-button" data-xuenwu-submit="skipped">跳过</button>
+        <button type="button" class="ghost-button" data-xuenwu-submit="unknown">不会</button>
+        <button type="button" class="ghost-button" data-xuenwu-submit="wrong">错误</button>
+        <button type="button" class="ghost-button" data-xuenwu-submit="partial">部分正确</button>
+        <button type="button" class="primary-button" data-xuenwu-submit="correct">正确</button>
       </div>
       <p class="xuenwu-submit-state" aria-live="polite"></p>
     `;
     row.querySelectorAll("[data-xuenwu-submit]").forEach((button) => {
-      button.addEventListener("click", () => submitXuenwuAttempt(row, item, button.dataset.xuenwuSubmit === "correct"));
+      button.addEventListener("click", () => submitXuenwuAttempt(row, item, button.dataset.xuenwuSubmit));
     });
     host.append(row);
   });
+  if (practiceSession) {
+    const actions = document.createElement("article");
+    actions.className = "xuenwu-result-item xuenwu-practice-finish";
+    actions.innerHTML = `
+      <div class="xuenwu-result-meta"><span>练习批次</span><span>${escapeHtml(practiceSession.id)}</span></div>
+      <strong>完成作答后生成本组练习反馈</strong>
+      <p>系统会统计得分、完成率、薄弱节点，并给出下一步建议。</p>
+      <div class="xuenwu-question-actions">
+        <button type="button" class="primary-button" data-xuenwu-finish>完成本组练习</button>
+      </div>
+    `;
+    actions.querySelector("[data-xuenwu-finish]")?.addEventListener("click", () => finishXuenwuPractice(practiceSession.id));
+    host.append(actions);
+  }
 }
 
-async function submitXuenwuAttempt(row, item, isCorrect) {
+async function submitXuenwuAttempt(row, item, result) {
   const textarea = row.querySelector(".xuenwu-answer");
   const statusEl = row.querySelector(".xuenwu-submit-state");
   const buttons = row.querySelectorAll("[data-xuenwu-submit]");
   const studentAnswer = textarea?.value.trim() || "";
-  if (!studentAnswer) {
+  if (!studentAnswer && result !== "skipped" && result !== "unknown") {
     statusEl.textContent = "先写一点答案或思路，再提交。";
     statusEl.className = "xuenwu-submit-state warn";
     textarea?.focus();
@@ -2869,23 +2889,57 @@ async function submitXuenwuAttempt(row, item, isCorrect) {
   statusEl.textContent = "正在保存...";
   statusEl.className = "xuenwu-submit-state";
   try {
-    const response = await fetch(`/api/xuenwu/review-items/${item.id}/attempts`, {
+    const response = await fetch(`/api/xuenwu/practice-items/${item.id}/attempts`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ student_answer: studentAnswer, is_correct: isCorrect }),
+      body: JSON.stringify({
+        student_answer: studentAnswer,
+        student_confirmed_result: result,
+        viewed_answer: row.querySelector(".xuenwu-reference")?.open || false,
+      }),
     });
     if (!response.ok) throw new Error(await response.text());
-    const payload = await response.json();
-    row.classList.add(isCorrect ? "is-correct" : "is-wrong");
-    statusEl.textContent = isCorrect
-      ? "已记录为做对。"
-      : `已加入错题本，后面可以在左侧「错题本」里复习。${payload.wrong_question_id ? "" : ""}`;
+    await response.json();
+    row.classList.add(result === "correct" ? "is-correct" : "is-wrong");
+    statusEl.textContent = result === "correct" || result === "skipped"
+      ? `已记录为${practiceResultLabel(result)}。`
+      : `已记录为${practiceResultLabel(result)}，后面可以在左侧「错题本」里复习。`;
     statusEl.className = "xuenwu-submit-state ok";
   } catch (error) {
     buttons.forEach((button) => { button.disabled = false; });
     statusEl.textContent = `保存失败:${error.message}`;
     statusEl.className = "xuenwu-submit-state warn";
   }
+}
+
+async function finishXuenwuPractice(practiceSessionId) {
+  if (!xuenwuPracticeSummary) return;
+  renderXuenwuResults([{ meta: "统计中", content: "正在生成本组练习反馈..." }], xuenwuPracticeSummary);
+  const response = await fetch(`/api/xuenwu/practice-sessions/${practiceSessionId}/finish`, { method: "POST" });
+  if (!response.ok) {
+    renderXuenwuResults([{ meta: "统计失败", content: await response.text() }], xuenwuPracticeSummary);
+    return;
+  }
+  const payload = await response.json();
+  const stats = payload.stats || {};
+  const counts = stats.result_counts || {};
+  renderXuenwuResults([
+    {
+      meta: "练习反馈",
+      content: payload.feedback?.summary || "本组练习已完成。",
+      detail: `完成率 ${stats.completion_rate ?? 0}% · 正确 ${counts.correct || 0} · 部分正确 ${counts.partial || 0} · 错误 ${counts.wrong || 0} · 不会 ${counts.unknown || 0} · 跳过 ${counts.skipped || 0}。${payload.feedback?.next_action || ""}`,
+    },
+  ], xuenwuPracticeSummary);
+}
+
+function practiceResultLabel(result) {
+  return {
+    correct: "正确",
+    partial: "部分正确",
+    wrong: "错误",
+    unknown: "不会",
+    skipped: "跳过",
+  }[result] || result;
 }
 
 function reviewTypeLabel(type) {
@@ -2895,6 +2949,17 @@ function reviewTypeLabel(type) {
     reflection: "反思提示",
     wrong_retry: "错题再练",
   }[type] || "复习内容";
+}
+
+function questionTypeLabel(type) {
+  return {
+    choice: "选择题",
+    fill_blank: "填空题",
+    calculation: "计算题",
+    code: "代码题",
+    short_answer: "简答题",
+    question: "练习题",
+  }[type] || type || "练习题";
 }
 
 function difficultyLabel(difficulty) {
