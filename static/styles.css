@@ -935,6 +935,58 @@ body.light-theme .ghost-button:hover {
   gap: 12px;
 }
 
+.xuenwu-question-content,
+.xuenwu-reference-answer,
+.xuenwu-question-explanation {
+  display: grid;
+  gap: 10px;
+}
+
+.xuenwu-question-content p,
+.xuenwu-reference-answer p,
+.xuenwu-question-explanation p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.xuenwu-question-content p {
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 820;
+  line-height: 1.75;
+}
+
+.xuenwu-question-explanation p,
+.xuenwu-reference-answer p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.xuenwu-formula-line {
+  margin: 8px 0;
+  color: var(--ink);
+  font-family: Georgia, "Times New Roman", "Microsoft YaHei", serif;
+  font-size: 20px;
+  font-weight: 560;
+  line-height: 1.8;
+  text-align: center;
+  white-space: pre-wrap;
+}
+
+.xuenwu-option-line {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 760;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.xuenwu-math {
+  font-family: Georgia, "Times New Roman", "Microsoft YaHei", serif;
+  font-weight: 600;
+}
+
 .xuenwu-answer {
   width: 100%;
   min-height: 88px;

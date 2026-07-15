@@ -2804,6 +2804,39 @@ function practiceModeLabel(mode) {
   }[mode] || "根据当前学习进度";
 }
 
+function formatPracticeText(value) {
+  const lines = String(value || "")
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (!lines.length) return "";
+  return lines.map((line) => {
+    const normalized = line.replace(/^[-*]\s+/, "");
+    if (/^[A-D][.、．]\s*/.test(normalized)) {
+      return `<div class="xuenwu-option-line">${formatInlineMath(normalized)}</div>`;
+    }
+    if (isFormulaLine(normalized)) {
+      return `<div class="xuenwu-formula-line">${formatInlineMath(normalized)}</div>`;
+    }
+    return `<p>${formatInlineMath(normalized)}</p>`;
+  }).join("");
+}
+
+function isFormulaLine(line) {
+  if (/^\$\$.*\$\$$/.test(line) || /^\\\[.*\\\]$/.test(line)) return true;
+  const mathSignals = ["=", "∫", "∑", "lim", "\\int", "\\sum", "\\frac", "\\sqrt", "^", "_"];
+  return line.length <= 90 && mathSignals.some((token) => line.includes(token)) && !/[。？！]$/.test(line);
+}
+
+function formatInlineMath(value) {
+  return escapeHtml(value)
+    .replace(/\$\$([^$]+)\$\$/g, '<span class="xuenwu-math">$1</span>')
+    .replace(/\$([^$]+)\$/g, '<span class="xuenwu-math">$1</span>')
+    .replace(/\\\((.*?)\\\)/g, '<span class="xuenwu-math">$1</span>')
+    .replace(/\\\[(.*?)\\\]/g, '<span class="xuenwu-math">$1</span>');
+}
+
 async function loadXuenwuWrongQuestions(host = xuenwuWrongbookResults) {
   if (!state.sessionId) {
     renderXuenwuResults([{ content: "请先在左侧选择一张学习地图，再查看错题本。", meta: "未选择地图" }], host);
@@ -2863,12 +2896,12 @@ function renderXuenwuReviewItems(items, host = xuenwuPracticeResults, practiceSe
         <span>${escapeHtml(difficultyLabel(item.difficulty))}</span>
         <span>${escapeHtml(item.generation_basis || "")}</span>
       </div>
-      <strong>${escapeHtml(item.content || "")}</strong>
-      ${item.explanation ? `<p>${escapeHtml(item.explanation)}</p>` : ""}
+      <div class="xuenwu-question-content">${formatPracticeText(item.content || "")}</div>
+      ${item.explanation ? `<div class="xuenwu-question-explanation">${formatPracticeText(item.explanation)}</div>` : ""}
       <textarea class="xuenwu-answer" rows="3" placeholder="把你的答案或思路写在这里..."></textarea>
       <details class="xuenwu-reference">
         <summary>查看参考答案</summary>
-        <p>${escapeHtml(item.standard_answer || item.answer || "暂无参考答案")}</p>
+        <div class="xuenwu-reference-answer">${formatPracticeText(item.standard_answer || item.answer || "暂无参考答案")}</div>
       </details>
       <div class="xuenwu-question-actions">
         <button type="button" class="ghost-button" data-xuenwu-submit="skipped">跳过</button>
