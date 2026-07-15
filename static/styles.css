@@ -860,6 +860,31 @@ body.light-theme .ghost-button:hover {
   gap: 10px;
 }
 
+.xuenwu-practice-modes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.xuenwu-practice-modes button {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--muted);
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 820;
+  cursor: pointer;
+}
+
+.xuenwu-practice-modes button.active {
+  border-color: rgba(96, 165, 250, 0.72);
+  background: rgba(96, 165, 250, 0.14);
+  color: var(--ink);
+}
+
 .xuenwu-results {
   display: grid;
   gap: 10px;
@@ -1031,6 +1056,16 @@ body.light-theme .xuenwu-action,
 body.light-theme .xuenwu-composer {
   border-color: rgba(15, 23, 42, 0.12);
   background: rgba(255, 255, 255, 0.74);
+}
+
+body.light-theme .xuenwu-practice-modes button {
+  border-color: rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+body.light-theme .xuenwu-practice-modes button.active {
+  border-color: rgba(37, 99, 235, 0.42);
+  background: rgba(37, 99, 235, 0.1);
 }
 
 body.light-theme .xuenwu-answer,

@@ -249,10 +249,13 @@ async def _ai_exam_questions(
     session: LearningSession,
     nodes: list[KnowledgeNode],
     count: int,
+    focus_node_ids: list[str] | None = None,
 ) -> list[dict[str, str]]:
     current = next((node for node in nodes if node.id == session.current_node_id), None)
     usable_nodes = [node for node in nodes if node.parent_id] or nodes
-    focus_nodes = ([current] if current else []) + usable_nodes[:12]
+    focus_set = set(focus_node_ids or [])
+    focus_nodes = [node for node in nodes if node.id in focus_set]
+    focus_nodes = focus_nodes or (([current] if current else []) + usable_nodes[:12])
     seen: set[str] = set()
     focus_nodes = [node for node in focus_nodes if not (node.id in seen or seen.add(node.id))]
     prompt = {
@@ -303,7 +306,7 @@ async def _ai_exam_questions(
     if not isinstance(raw_items, list):
         raise ValueError("AI 出题结果缺少 items")
     by_title = {node.title: node for node in nodes}
-    fallback_node = (current or usable_nodes[0])
+    fallback_node = (focus_nodes[0] if focus_nodes else current or usable_nodes[0])
     items: list[dict[str, str]] = []
     for raw in raw_items[:count]:
         if not isinstance(raw, dict):
@@ -352,7 +355,25 @@ async def create_practice_session(
         if not any(node.id == payload.target_node_id for node in nodes):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="指定节点不属于当前学习地图")
 
+    wrong_node_ids: list[str] = []
+    if payload.mode == "wrong_retry":
+        wrong_result = await db.execute(
+            select(WrongQuestion.node_id)
+            .where(
+                WrongQuestion.user_id == user.id,
+                WrongQuestion.session_id == session.id,
+                WrongQuestion.node_id.is_not(None),
+            )
+            .order_by(WrongQuestion.created_at.desc())
+            .limit(payload.question_count)
+        )
+        wrong_node_ids = [node_id for node_id in wrong_result.scalars().all() if node_id]
+        if not wrong_node_ids:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="当前错题本还没有可用于再练的错题")
+
     target_node_id = payload.target_node_id or session.current_node_id or usable_nodes[0].id
+    if payload.mode == "wrong_retry":
+        target_node_id = wrong_node_ids[0]
     source_plan = {
         "mode": payload.mode,
         "target_node_id": target_node_id,
@@ -361,10 +382,13 @@ async def create_practice_session(
         "basis_plan": (
             ["SPECIFIED_NODE"] * payload.question_count
             if payload.mode == "specified_node"
+            else ["WRONG_KNOWLEDGE_POINT"] * payload.question_count
+            if payload.mode == "wrong_retry"
             else ["CURRENT_NODE", "CURRENT_NODE", "COMPLETED_NODE", "WEAK_PREREQUISITE", "WRONG_KNOWLEDGE_POINT"][
                 : payload.question_count
             ]
         ),
+        "wrong_node_ids": wrong_node_ids,
     }
     practice = PracticeSession(
         user_id=user.id,
@@ -378,16 +402,25 @@ async def create_practice_session(
     await db.flush()
 
     try:
+        focused_node_ids = (
+            [payload.target_node_id]
+            if payload.mode == "specified_node" and payload.target_node_id
+            else wrong_node_ids
+            if payload.mode == "wrong_retry"
+            else None
+        )
         generated = await _ai_exam_questions(
             service=service,
             db=db,
             session=session,
             nodes=nodes,
             count=payload.question_count,
+            focus_node_ids=focused_node_ids,
         )
     except Exception as exc:  # noqa: BLE001
         print(f"[xuenwu] practice AI question fallback: {exc}")
-        generated = _fallback_exam_questions(session, nodes, payload.question_count)
+        fallback_nodes = [node for node in nodes if focused_node_ids and node.id in set(focused_node_ids)]
+        generated = _fallback_exam_questions(session, fallback_nodes or nodes, payload.question_count)
 
     basis_plan = source_plan["basis_plan"]
     items: list[PracticeItem] = []

@@ -102,6 +102,7 @@ const xuenwuPracticeSummary = $("#xuenwu-practice-summary");
 const xuenwuWrongbookResults = $("#xuenwu-wrongbook-results");
 const xuenwuGeneratePractice = $("#xuenwu-generate-practice");
 const xuenwuRefreshWrongbook = $("#xuenwu-refresh-wrongbook");
+const xuenwuPracticeModeButtons = $$(".xuenwu-practice-modes [data-practice-mode]");
 
 document.body.classList.toggle("light-theme", state.theme === "light");
 appShell.classList.toggle("sidebar-collapsed", state.sidebarCollapsed);
@@ -1942,6 +1943,11 @@ document.addEventListener("click", (event) => {
 
 xuenwuGeneratePractice?.addEventListener("click", () => generateXuenwuReviewItems(xuenwuPracticeResults));
 xuenwuRefreshWrongbook?.addEventListener("click", () => loadXuenwuWrongQuestions(xuenwuWrongbookResults));
+xuenwuPracticeModeButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    xuenwuPracticeModeButtons.forEach((item) => item.classList.toggle("active", item === button));
+  });
+});
 
 xuenwuForm?.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -2766,16 +2772,36 @@ async function generateXuenwuReviewItems(host = xuenwuPracticeResults) {
     renderXuenwuResults([{ content: "请先在左侧选择一张学习地图，再生成练习。", meta: "未选择地图" }], host);
     return;
   }
+  const selectedMode = $(".xuenwu-practice-modes [data-practice-mode].active")?.dataset.practiceMode || "current_progress";
+  const currentNode = state.nodes.find((node) => node.id === state.currentNodeId);
+  if (selectedMode === "specified_node" && !currentNode) {
+    renderXuenwuResults([{ content: "请先在右侧知识地图中选择一个具体知识节点，再按当前节点练习。", meta: "未选择节点" }], host);
+    return;
+  }
   if (xuenwuPracticeSummary) xuenwuPracticeSummary.classList.add("hidden");
-  renderXuenwuResults([{ content: "正在根据当前学习地图和最近知识节点生成 5 道考试风格练习题...", meta: "AI 出题中" }], host);
+  const modeLabel = practiceModeLabel(selectedMode);
+  renderXuenwuResults([{ content: `正在${modeLabel}生成 5 道考试风格练习题...`, meta: "AI 出题中" }], host);
+  const requestBody = {
+    mode: selectedMode,
+    question_count: 5,
+  };
+  if (selectedMode === "specified_node") requestBody.target_node_id = currentNode.id;
   const response = await fetch(`/api/xuenwu/sessions/${state.sessionId}/practice-sessions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ mode: "current_progress", question_count: 5 }),
+    body: JSON.stringify(requestBody),
   });
   if (!response.ok) throw new Error(await response.text());
   const payload = await response.json();
   renderXuenwuReviewItems(payload.items || [], host, payload.session);
+}
+
+function practiceModeLabel(mode) {
+  return {
+    current_progress: "根据当前学习进度",
+    specified_node: "围绕当前知识节点",
+    wrong_retry: "根据错题本",
+  }[mode] || "根据当前学习进度";
 }
 
 async function loadXuenwuWrongQuestions(host = xuenwuWrongbookResults) {

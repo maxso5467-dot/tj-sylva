@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-PracticeMode = Literal["current_progress", "specified_node"]
+PracticeMode = Literal["current_progress", "specified_node", "wrong_retry"]
 PracticeResult = Literal["correct", "partial", "wrong", "unknown", "skipped"]
 MasteryState = Literal["not_started", "learning", "needs_consolidation", "basic_mastery", "fluent_mastery"]
 WrongReviewStatus = Literal["to_review", "reviewing", "mastered"]

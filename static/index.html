@@ -159,6 +159,11 @@
             <section class="xuenwu-hero" aria-label="智能练习操作">
               <h2>按学习进度练一组</h2>
               <p>生成选择题、填空题、计算/解答题和应用题，不再只问概念。</p>
+              <div class="xuenwu-practice-modes" role="radiogroup" aria-label="选择练习模式">
+                <button class="active" type="button" data-practice-mode="current_progress">按当前进度</button>
+                <button type="button" data-practice-mode="specified_node">按当前节点</button>
+                <button type="button" data-practice-mode="wrong_retry">错题再练</button>
+              </div>
               <div class="xuenwu-actions">
                 <button id="xuenwu-generate-practice" class="xuenwu-action" type="button">
                   <span>生成 5 道考试风格练习题</span>
@@ -371,6 +376,6 @@
       </button>
     </div>
 
-    <script src="/static/app.js?v=20260714-xuenwu-practice-api" type="module"></script>
+    <script src="/static/app.js?v=20260715-xuenwu-practice-modes" type="module"></script>
   </body>
 </html>
