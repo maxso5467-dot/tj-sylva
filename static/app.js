@@ -102,7 +102,7 @@ const xuenwuPracticeSummary = $("#xuenwu-practice-summary");
 const xuenwuWrongbookResults = $("#xuenwu-wrongbook-results");
 const xuenwuGeneratePractice = $("#xuenwu-generate-practice");
 const xuenwuRefreshWrongbook = $("#xuenwu-refresh-wrongbook");
-const xuenwuPracticeModeButtons = $$(".xuenwu-practice-modes [data-practice-mode]");
+const xuenwuPracticeModeButtons = Array.from(document.querySelectorAll(".xuenwu-practice-modes [data-practice-mode]"));
 
 document.body.classList.toggle("light-theme", state.theme === "light");
 appShell.classList.toggle("sidebar-collapsed", state.sidebarCollapsed);
