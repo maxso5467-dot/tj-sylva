@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.base import get_session
-from app.db.models import AppUser
+from app.db.models import AppUser, LearningSession
 from app.routers.deps import get_service
 from app.schemas import (
     BackgroundFollowupIn,
@@ -187,8 +187,11 @@ async def get_tree(
     session_id: str,
     db: AsyncSession = Depends(get_session),
     service: KnowledgeMapService = Depends(get_service),
-    _user: AppUser = Depends(get_current_user),
+    user: AppUser = Depends(get_current_user),
 ) -> NodesOut:
+    session = await db.get(LearningSession, session_id)
+    if session is None or session.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="学习地图不存在")
     nodes = await service.get_tree(db, session_id)
     return NodesOut(nodes=[NodeOut.model_validate(n) for n in nodes])
 

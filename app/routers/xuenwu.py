@@ -515,7 +515,7 @@ async def finish_practice_session(
     for attempt in attempts:
         counts[attempt.final_result] = counts.get(attempt.final_result, 0) + 1
     total_questions = max(practice.question_count, 1)
-    answered = len(attempts)
+    answered = len(attempts) - counts.get("skipped", 0)
     score = round(sum(attempt.score for attempt in attempts) / total_questions)
     completion_rate = round(answered / total_questions * 100)
     node_scores: dict[str, list[int]] = {}
